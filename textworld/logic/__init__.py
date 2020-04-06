@@ -693,6 +693,16 @@ class Proposition(with_metaclass(PropositionTracker, object)):
         args = [Variable.deserialize(arg) for arg in data["arguments"]]
         return cls(name, args)
 
+    def negate(self) -> "Proposition":
+        if self.is_negation:
+            return Proposition(self.name.split("not_", 1)[1], self.arguments)
+
+        return Proposition("not_" + self.name, self.arguments)
+
+    @property
+    def is_negation(self) -> bool:
+        return self.name.startswith("not_")
+
 
 @total_ordering
 class Placeholder:
@@ -900,6 +910,24 @@ class Predicate:
         else:
             return {ph: var for ph, var in zip(self.parameters, proposition.arguments)}
 
+    def negate(self) -> "Predicate":
+        if self.is_negation:
+            return Predicate(self.name.split("not_", 1)[1], self.parameters)
+
+        return Predicate("not_" + self.name, self.parameters)
+
+    @property
+    def is_negation(self) -> bool:
+        return self.name.startswith("not_")
+
+    @property
+    def universal(self) -> bool:
+        return False
+
+    @property
+    def existential(self) -> bool:
+        return False
+
 
 class Alias:
     """
@@ -1096,6 +1124,20 @@ class Rule:
         self._post_set = frozenset(self.postconditions)
 
         self.placeholders = tuple(uniquify(ph for pred in self.all_predicates for ph in pred.parameters))
+
+    @property
+    def added(self) -> Collection[Predicate]:
+        """
+        All the new predicates being introduced by this rule.
+        """
+        return self._post_set - self._pre_set
+
+    @property
+    def removed(self) -> Collection[Predicate]:
+        """
+        All the old predicates being removed by this rule.
+        """
+        return self._pre_set - self._post_set
 
     @property
     def all_predicates(self) -> Iterable[Predicate]:
