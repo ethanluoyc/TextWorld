@@ -55,7 +55,8 @@ class GrammarOptions:
         options = options or kwargs
 
         #: str: Grammar theme's name. All `*.twg` files starting with that name will be loaded.
-        self.theme = options.get("theme", "house")
+        # self.theme = options.get("theme", "house")
+        self.theme = options.get("theme", "new")  # TODO: change back to previous line.
         #: List[str]: List of names the text generation should not use.
         self.names_to_exclude = list(options.get("names_to_exclude", []))
         #: bool: Append numbers after an object name if there is not enough variation for it.

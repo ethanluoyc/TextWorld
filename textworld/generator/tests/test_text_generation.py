@@ -102,5 +102,47 @@ def test_do_not_overwrite_entity_desc(verbose=False):
     assert quest.desc == "Find a valuable object."
 
 
+def test_list_expansions():
+    options = textworld.GameOptions()
+    options.seed = 1234
+    options.grammar.theme = "new"
+
+    M = textworld.GameMaker(options)
+
+    # Create a room.
+    room = M.new_room("Room")
+    M.set_player(room)
+
+    game = M.build()
+    print(game.infos[room.id].desc)
+    game.infos[room.id].desc = None
+
+    # Add a supporter to the room.
+    supporter = M.new(type='s', name='table')
+    supporter.infos.indefinite = "a"
+    M.add_fact("supporter", supporter)
+    room.add(supporter)
+
+    game = M.build()
+    print(game.infos[room.id].desc)
+    game.infos[room.id].desc = None
+
+    # Add a container to the room.
+    container = M.new(type='c', name='chest')
+    container.infos.indefinite = "a"
+    M.add_fact("container", container)
+    room.add(container)
+    M.add_fact("open", container)
+    fridge = M.new(type='c', name='fridge')
+    fridge.infos.indefinite = "a"
+    room.add(container, fridge)
+    M.add_fact("container", fridge)
+    M.add_fact("closed", fridge)
+
+    game = M.build()
+    print(game.infos[room.id].desc)
+    game.infos[room.id].desc = None
+
+
 if __name__ == "__main__":
-    test_blend_instructions(verbose=True)
+    test_list_expansions()
