@@ -15,9 +15,9 @@ from pkg_resources import Requirement, resource_filename
 
 from textworld.utils import make_temp_directory, str2bool, chunk
 
-from textworld.generator.game import Game
+from textworld.generator.game import EventCondition, EventAction, EventAnd, EventOr, Game
 from textworld.generator.world import WorldRoom, WorldEntity
-from textworld.logic import Signature, Proposition, Action, Variable
+from textworld.logic import Signature, Proposition, Action, Variable, Rule
 
 
 I7_DEFAULT_PATH = resource_filename(Requirement.parse('textworld'), 'textworld/thirdparty/inform7-6M62')
@@ -321,12 +321,10 @@ class Inform7Game:
             """)
             source += quest_completed.format(quest_id=quest_id)
 
-            for event_id, event in enumerate(quest.win_events):
-                commands = self.gen_commands_from_actions(event.actions)
-                event.commands = commands
-
-                walkthrough = '\nTest quest{}_{} with "{}"\n\n'.format(quest_id, event_id, " / ".join(commands))
-                source += walkthrough
+            if quest.win_event:
+                commands = quest.win_event.commands or self.gen_commands_from_actions(quest.win_event.actions)
+                walkthrough = '\nTest quest{} with "{}"\n\n'.format(quest_id, " / ".join(commands))
+                quest_ending += walkthrough
 
             # Add winning and losing conditions for quest.
             quest_ending_conditions = textwrap.dedent("""\
@@ -342,15 +340,21 @@ class Inform7Game:
                 increase the score by {reward}; [Quest completed]
                 Now the quest{quest_id} completed is true;""")
 
-            for fail_event in quest.fail_events:
-                conditions = self.gen_source_for_conditions(fail_event.condition.preconditions)
-                quest_ending_conditions += fail_template.format(conditions=conditions)
+            if quest.fail_event:
+                # Assuming quest.fail_event is in a DNF.
+                for events in quest.fail_event:
+                    # TODO: deal with EventAction
+                    conditions = self.gen_source_for_conditions(cond for event in events for cond in event.condition.preconditions)
+                    quest_ending_conditions += fail_template.format(conditions=conditions)
 
-            for win_event in quest.win_events:
-                conditions = self.gen_source_for_conditions(win_event.condition.preconditions)
-                quest_ending_conditions += win_template.format(conditions=conditions,
-                                                               reward=quest.reward,
-                                                               quest_id=quest_id)
+            if quest.win_event:
+                # Assuming quest.win_event is in a DNF.
+                for events in quest.win_event:
+                    # TODO: deal with EventAction
+                    conditions = self.gen_source_for_conditions(cond for event in events for cond in event.condition.preconditions)
+                    quest_ending_conditions += win_template.format(conditions=conditions,
+                                                                   reward=quest.reward,
+                                                                   quest_id=quest_id)
 
             quest_ending = """\
             Every turn:\n{conditions}
