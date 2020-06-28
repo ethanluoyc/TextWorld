@@ -44,8 +44,8 @@ class TextWorldEnv(textworld.Environment):
         self.state["_game_progression"] = self._game_progression
         self.state["_facts"] = list(self._game_progression.state.facts)
 
-        self.state["won"] = '*** The End ***' in self.state["feedback"]
-        self.state["lost"] = '*** You lost! ***' in self.state["feedback"]
+        self.state["won"] = self._game_progression.state.check_goal()
+        self.state["lost"] = False  # Can an ALFRED game be lost?
 
         self.state["_winning_policy"] = self._current_winning_policy
         # if self.infos.policy_commands:

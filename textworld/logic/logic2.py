@@ -410,6 +410,9 @@ class State(textworld.logic.State):
 
         return changes
 
+    def check_goal(self):
+        return self.downward_lib.check_goal()
+
     def print_state(self):
         print("-= STATE =-")
         state_size = self.downward_lib.get_state_size()
