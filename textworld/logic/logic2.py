@@ -12,9 +12,9 @@ from tatsu.model import NodeWalker
 
 import fast_downward
 from fast_downward import Operator
-#from fast_downward import load_lib, close_lib, pddl2sas
 
 import textworld.logic.model
+from textworld.utils import check_flag
 from textworld.logic.model import GameLogicModelBuilderSemantics
 from textworld.logic.parser import GameLogicParser
 from textworld.logic import Proposition, Variable, Predicate, Rule, Placeholder
@@ -186,7 +186,7 @@ class State(textworld.logic.State):
         with open(problem_filename) as f:
             problem = f.read()
 
-        self.task, self.sas = fast_downward.pddl2sas(self._logic.domain, problem)
+        self.task, self.sas = fast_downward.pddl2sas(self._logic.domain, problem, verbose=check_flag("TW_PDDL_DEBUG"))
         self._actions = {a.name: a for a in self.task.actions}
 
         # Import types from fastdownward
