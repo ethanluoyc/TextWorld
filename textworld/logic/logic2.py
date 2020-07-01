@@ -232,19 +232,15 @@ class State(textworld.logic.State):
             if fact.is_negation:
                 self.add_fact(fact)
 
+    def load_pddl(self, problem_filename):
+        self._init_planner(problem_filename)
 
-    @classmethod
-    def from_pddl(cls, logic: GameLogic, problem_filename: str) -> "State":
-        state = cls(logic, [])
-        state._init_planner(problem_filename)
-
-        state_size = state.downward_lib.get_state_size()
+        state_size = self.downward_lib.get_state_size()
         atoms = (Atom * state_size)()
-        state.downward_lib.get_state(atoms)
-        facts = [atom.get_fact(state.name2type) for atom in atoms]
+        self.downward_lib.get_state(atoms)
+        facts = [atom.get_fact(self.name2type) for atom in atoms]
         facts = [fact for fact in facts if not fact.is_negation]
-        state.add_facts(facts)
-        return state
+        self.add_facts(facts)
 
     def as_pddl(self):
         predicate = "({name} {params})"
