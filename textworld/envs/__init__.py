@@ -5,3 +5,4 @@ from textworld.envs.glulx.git_glulx import GitGlulxEnv
 from textworld.envs.zmachine.jericho import JerichoEnv
 from textworld.envs.tw import TextWorldEnv
 from textworld.envs.wrappers.tw_inform7 import TWInform7
+from textworld.envs.pddl import PddlEnv

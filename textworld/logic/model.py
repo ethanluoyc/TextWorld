@@ -168,7 +168,7 @@ class ActionTypeNode(ModelBase):
     template = None
 
 
-class Document2Node(ModelBase):
+class PddlDocumentNode(ModelBase):
     parts = None
 
 

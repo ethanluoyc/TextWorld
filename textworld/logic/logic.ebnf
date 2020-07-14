@@ -107,9 +107,9 @@ actionTypePart = template | pddl | grammar;
 
 actionType::ActionTypeNode = "action" name:name "{" {(template:template | feedback:feedback | pddl:pddl | grammar:grammar)}* "}" ;
 
-document2::Document2Node = parts:{(actionType | grammar)}* $ ;
+pddlDocument::PddlDocumentNode = parts:{(actionType | grammar)}* $ ;
 
-start2 = document2 ;
+pddlStart = pddlDocument ;
 
 
 expression::ExpressionNode = expression:(conjunction | disjunction | predicate) ;

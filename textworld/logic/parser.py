@@ -647,8 +647,8 @@ class GameLogicParser(Parser):
             []
         )
 
-    @tatsumasu('Document2Node')
-    def _document2_(self):  # noqa
+    @tatsumasu('PddlDocumentNode')
+    def _pddlDocument_(self):  # noqa
 
         def block1():
             with self._group():
@@ -667,8 +667,8 @@ class GameLogicParser(Parser):
         )
 
     @tatsumasu()
-    def _start2_(self):  # noqa
-        self._document2_()
+    def _pddlStart_(self):  # noqa
+        self._pddlDocument_()
 
     @tatsumasu('ExpressionNode')
     @leftrec
@@ -927,10 +927,10 @@ class GameLogicSemantics(object):
     def actionType(self, ast):  # noqa
         return ast
 
-    def document2(self, ast):  # noqa
+    def pddlDocument(self, ast):  # noqa
         return ast
 
-    def start2(self, ast):  # noqa
+    def pddlStart(self, ast):  # noqa
         return ast
 
     def expression(self, ast):  # noqa

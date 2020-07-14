@@ -55,7 +55,7 @@ class _ModelConverter(NodeWalker):
 
         return action
 
-    def walk_Document2Node(self, node):
+    def walk_PddlDocumentNode(self, node):
         actions = {}
         grammar = {}
         for part in node.parts:
@@ -140,17 +140,19 @@ class GameLogic:
     The logic for a game (types, rules, grammar, etc.).
     """
 
-    def __init__(self):
-        self.domain_filename = None
-        self.domain = None
-        self._document = ""
+    def __init__(self, domain, grammar):
+        self.domain = domain
         self.grammar = TextGrammar()
         self.actions = {}
         self.types = textworld.logic.TypeHierarchy()
 
+        # Load grammar's content
+        actions, grammar = _parse_and_convert(grammar, rule_name="pddlStart")
+        self.actions.update(actions)
+        self.grammar.update(grammar)
+
     def load_domain(self, filename):
         self.domain_filename = filename
-
         with open(filename) as f:
             self.domain = f.read()
 
@@ -158,35 +160,32 @@ class GameLogic:
         with open(filename) as f:
             document = f.read()
 
-        actions, grammar = _parse_and_convert(document, rule_name="start2")
+        actions, grammar = _parse_and_convert(document, rule_name="pddlStart")
         self.actions.update(actions)
         self.grammar.update(grammar)
 
 
 class State(textworld.logic.State):
     """
-    The current state of a world.
+    The current state of a game.
     """
 
-    def __init__(self, logic: GameLogic, facts: Iterable[Proposition] = None):
-        self._logic = logic
-        self._actions = {}
-
+    def __init__(self, downward_lib, pddl_problem: str, logic: GameLogic, facts: Iterable[Proposition] = None):
+        """
+        Arguments:
+            downward_lib:
+            pddl: game described in the PDDL format (aka PDDL problem).
+        """
         self._facts = defaultdict(set)
         self._vars_by_name = {}
         self._vars_by_type = defaultdict(set)
         self._var_counts = Counter()
 
-        self.downward_lib = fast_downward.load_lib()
-        if facts:
-            self.add_facts(facts)
-            self._init_planner()
+        self._logic = logic
+        self.downward_lib = downward_lib
 
-    def _init_planner(self, problem_filename=None):
-        with open(problem_filename) as f:
-            problem = f.read()
-
-        self.task, self.sas = fast_downward.pddl2sas(self._logic.domain, problem, verbose=check_flag("TW_PDDL_DEBUG"))
+        # Load domain + problem.
+        self.task, self.sas = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"))
         self._actions = {a.name: a for a in self.task.actions}
 
         # Import types from fastdownward
@@ -211,9 +210,7 @@ class State(textworld.logic.State):
                 if atom.fluent.symbol == "total-cost":
                     return None
 
-                #name = "{}_{}".format(atom.fluent.symbol, atom.expression.value)
                 name = "{}".format(atom.expression.value)
-
                 if str.isdigit(name):  # Discard distance relations.
                     return None
 
@@ -227,134 +224,9 @@ class State(textworld.logic.State):
         state_size = self.downward_lib.get_state_size()
         atoms = (Atom * state_size)()
         self.downward_lib.get_state(atoms)
-        for atom in atoms:
-            fact = atom.get_fact(self.name2type)
-            if fact.is_negation:
-                self.add_fact(fact)
-
-    def load_pddl(self, problem_filename):
-        self._init_planner(problem_filename)
-
-        state_size = self.downward_lib.get_state_size()
-        atoms = (Atom * state_size)()
-        self.downward_lib.get_state(atoms)
         facts = [atom.get_fact(self.name2type) for atom in atoms]
         facts = [fact for fact in facts if not fact.is_negation]
         self.add_facts(facts)
-
-    def as_pddl(self):
-        predicate = "({name} {params})"
-        problem = textwrap.dedent("""\
-        (define (problem textworld-game-1)
-            (:domain textworld)
-            (:objects {objects})
-            (:init {init})
-            (:goal
-                (and {goal}))
-        )
-        """)
-
-        def _format_proposition(fact):
-            return predicate.format(
-                name=fact.name,
-                params=" ".join(fact.names)
-            )
-
-        problem_pddl = problem.format(
-            objects=" ".join(sorted(set("{} - {}".format(arg.name, arg.type) for fact in self.facts for arg in fact.arguments))),
-            init=textwrap.indent("\n" + "\n".join(_format_proposition(fact) for fact in self.facts), "        "),
-            #goal=textwrap.indent("\n" + "\n".join(_format_proposition(fact) for fact in game.quests[0].win_events[0].condition.preconditions), "            "),
-            goal="",
-        )
-
-        problem_pddl = problem_pddl.replace("'", "2")  # hack
-        problem_pddl = problem_pddl.replace("/", "-")  # hack
-        print(problem_pddl)
-        return problem_pddl
-        # with open("/tmp/textworld/problem.pddl", "w") as f:
-        #     f.write(problem_pddl)
-
-    def predicate2pddl(self, predicate: Predicate):
-        pass
-
-    def rule2pddl(self, rule: Rule):
-        pass
-
-    def domain_as_pddl(self):
-        domain = textwrap.dedent("""\
-        (define (domain textworld)
-            (:requirements
-            :typing)
-            (:types {types})
-            (:predicates {predicates})
-
-        {actions}
-        )
-        """)
-        predicate = "({name} {params})"
-        action = textwrap.dedent("""\
-        (:action {name}
-            :parameters ({parameters})
-            :precondition
-                (and {preconditions})
-            :effect
-                (and {effects})
-        )
-        """)
-
-        def _differentiate_type(types):
-            seen = []
-            for t in types:
-                if t in seen:
-                    t = t + "2"
-                seen.append(t)
-            return seen
-
-        def _format_predicate(pred):
-            if isinstance(pred, textworld.logic.Signature):
-                return predicate.format(
-                    name=pred.name,
-                    params=" ".join("?{p} - {t}".format(p=p, t=t) for t, p in zip(pred.types, _differentiate_type(pred.types)))
-                )
-
-            return predicate.format(
-                name=pred.name,
-                params=" ".join("?{p}".format(p=n) for n in pred.names)
-            )
-
-        def _format_effects(rule):
-            text = ""
-            text += textwrap.indent("\n" + "\n".join(_format_predicate(p) for p in rule.added), "            ")
-            text += textwrap.indent("\n" + "\n".join("(not {})".format(_format_predicate(p)) for p in rule.removed), "            ")
-            return text
-
-        predicates = []
-        for pred in sorted(self._logic.predicates):
-            predicates.append(_format_predicate(pred))
-
-        actions = []
-        for k in sorted(self._logic.rules):
-            rule = self._logic.rules[k]
-            actions.append(
-                action.format(
-                    name=rule.name,
-                    parameters=" ".join("?{p} - {t}".format(p=p.name, t=p.type) for p in rule.placeholders),
-                    preconditions=textwrap.indent("\n" + "\n".join(_format_predicate(p) for p in rule.preconditions), "            "),
-                    effects=_format_effects(rule),
-                )
-            )
-
-        domain_pddl = domain.format(
-            types=textwrap.indent("\n" + "\n".join(self._logic.types._types), "        "),
-            predicates=textwrap.indent("\n" + "\n".join(predicates), "        "),
-            actions=textwrap.indent("\n".join(actions), "    "),
-        )
-        domain_pddl = domain_pddl.replace("'", "2")  # hack
-        domain_pddl = domain_pddl.replace("/", "-")  # hack
-        print(domain_pddl)
-        return domain_pddl
-        # with open("/tmp/textworld/domain.pddl", "w") as f:
-        #     f.write(domain_pddl)
 
     def all_applicable_actions(self):
         # print("# Count operators")
@@ -415,53 +287,3 @@ class State(textworld.logic.State):
         atoms = (Atom * state_size)()
         self.downward_lib.get_state(atoms)
         print("\n".join(sorted(str(atom.get_fact(self.name2type)) for atom in atoms)))
-
-    # def all_assignments(self,
-    #                     rule: Rule,
-    #                     mapping: Mapping[Placeholder, Optional[Variable]] = None,
-    #                     partial: bool = False,
-    #                     allow_partial: Callable[[Placeholder], bool] = None,
-    #                     ) -> Iterable[Mapping[Placeholder, Optional[Variable]]]:
-    # """
-    # Find all possible placeholder assignments that would allow a rule to be instantiated in this state.
-
-    # Parameters
-    # ----------
-    # rule :
-    #     The rule to instantiate.
-    # mapping : optional
-    #     An initial mapping to start from, constraining the possible instantiations.
-    # partial : optional
-    #     Whether incomplete mappings, that would require new variables or propositions, are allowed.
-    # allow_partial : optional
-    #     A callback function that returns whether a partial match may involve the given placeholder.
-
-    # Returns
-    # -------
-    # The possible mappings for instantiating the rule.  Partial mappings requiring new variables will have None in
-    # place of existing Variables.
-    # """
-    #     pass
-
-    def _query(self, rule):
-
-        with textworld.utils.make_temp_directory() as tmpdir:
-            output_filename = pjoin(tmpdir, "output.sas")
-
-            if problem_filename is None:
-                problem_filename = pjoin(tmpdir, "problem.pddl")
-                with open(problem_filename, "w") as f:
-                    f.write(self.as_pddl())
-
-            # TODO: make translate return the string instead of writing to a temp file.
-            task = translate(self._logic.domain_filename, problem_filename, output_filename)
-            self._actions = {a.name: a for a in task.actions}
-
-            with open(output_filename) as f:
-                sas = f.read()
-
-            self.downward_lib.load_sas(sas.encode('utf-8'))
-
-    def __del__(self):
-        if hasattr(self, "downward_lib"):
-            fast_downward.close_lib(self.downward_lib)
