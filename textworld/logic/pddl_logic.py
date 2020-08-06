@@ -1,4 +1,5 @@
 
+import re
 import json
 import textwrap
 from os.path import join as pjoin
@@ -184,6 +185,9 @@ class State(textworld.logic.State):
         self._logic = logic
         self.downward_lib = downward_lib
 
+        # problem
+        self.pddl_problem = pddl_problem
+
         # Load domain + problem.
         self.task, self.sas = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"))
         self._actions = {a.name: a for a in self.task.actions}
@@ -280,6 +284,60 @@ class State(textworld.logic.State):
 
     def check_goal(self):
         return self.downward_lib.check_goal()
+
+    def as_pddl(self):
+        predicate = "({name} {params})"
+        problem = textwrap.dedent("""\
+        (define (problem textworld-game-1)
+            (:domain textworld)
+            (:objects {objects})
+            (:init {init})
+            (:goal
+        {goal}
+            )
+        )
+        """)
+
+        def _format_proposition(fact):
+            return predicate.format(
+                name=fact.name,
+                params=" ".join(fact.names)
+            )
+
+        problem_pddl = problem.format(
+            objects=" ".join(sorted(set("{} - {}".format(arg.name, arg.type) for fact in self.facts for arg in fact.arguments))),
+            init=textwrap.indent("\n" + "\n".join(_format_proposition(fact) for fact in self.facts), "        "),
+            # goal=textwrap.indent("\n" + "\n".join(_format_proposition(fact) for fact in game.quests[0].win_events[0].condition.preconditions), "            "),
+            goal="\n".join(self.pddl_problem.lower().partition("(:goal")[-1].split("\n")[:-3]),
+        )
+
+        problem_pddl = problem_pddl.replace("'", "2")  # hack
+        problem_pddl = problem_pddl.replace("/", "-")  # hack
+
+        return problem_pddl
+
+    def replan(self, infos):
+        current_pddl = self.as_pddl().replace("domain textworld", "domain alfred")
+        domain_pddl = self._logic.domain.lower()
+        plan = fast_downward.solve_pddl(domain_pddl, current_pddl)
+        if plan:
+            templated_actions = self.plan_to_templated_actions(plan, infos)
+            return templated_actions
+        else:
+            return []
+
+    def plan_to_templated_actions(self, plan, infos):
+        templated_actions = []
+        for step in plan:
+            components = step.split()
+            action = components[0]
+            action_params = [a.name.replace('?','') for a in self._actions[action].parameters]
+            param_values = {str(param): infos[step.split()[i+1]].name
+                            for i, param in enumerate(action_params)}
+            template = self._logic.actions[action].template if action != 'gotolocation' else "go to {r}"
+            template = template.format(**param_values)
+            templated_actions.append(template)
+        return templated_actions
 
     def print_state(self):
         print("-= STATE =-")

@@ -62,6 +62,8 @@ class PddlEnv(textworld.Environment):
         self.state["_game_progression"] = self._game_progression
         self.state["_facts"] = list(self._game_progression.state.facts)
 
+        self.state["pddl_state"] = self._game_progression.state.as_pddl()
+        self.state["expert_plan"] = self._game_progression.state.replan(self._game.infos)
         self.state["won"] = self._game_progression.state.check_goal()
         self.state["lost"] = False  # Can an ALFRED game be lost?
 
@@ -185,6 +187,9 @@ class PddlEnv(textworld.Environment):
         self.state["score"] = self._game_progression.score
         self.state["done"] = self.state["won"] or self.state["lost"]
         return self.state, self.state["score"], self.state["done"]
+
+    def replan(self):
+        return self._game_progression.state.replan()
 
     def copy(self) -> "TextWorldEnv":
         """ Return a soft copy. """
