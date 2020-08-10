@@ -190,6 +190,8 @@ class State(textworld.logic.State):
 
         # Load domain + problem.
         self.task, self.sas = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"))
+        _, self.sas_replan = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"), optimize=True)
+
         self._actions = {a.name: a for a in self.task.actions}
 
         # Import types from fastdownward
@@ -201,6 +203,7 @@ class State(textworld.logic.State):
                 pass
 
         self.downward_lib.load_sas(self.sas.encode('utf-8'))
+        self.downward_lib.load_sas_replan(self.sas_replan.encode('utf-8'))
 
         self.name2type = {o.name: o.type_name for o in self.task.objects}
         def _atom2proposition(atom):
@@ -316,15 +319,31 @@ class State(textworld.logic.State):
 
         return problem_pddl
 
+    # @profile
+    # def replan(self, infos):
+    #     current_pddl = self.as_pddl().replace("domain textworld", "domain alfred")
+    #     domain_pddl = self._logic.domain.lower()
+    #     _, sas = fast_downward.pddl2sas(domain_pddl, current_pddl, verbose=check_flag("TW_PDDL_DEBUG"), optimize=True)
+
+    #     if not self.downward_lib.solve_sas(sas.encode('utf-8'), check_flag("TW_PDDL_DEBUG")):
+    #         return []
+
+    #     operators = (Operator * self.downward_lib.get_last_plan_length())()
+    #     self.downward_lib.get_last_plan(operators)
+    #     plan = [op.name for op in operators]
+    #     templated_actions = self.plan_to_templated_actions(plan, infos)
+    #     return templated_actions
+
+    # @profile
     def replan(self, infos):
-        current_pddl = self.as_pddl().replace("domain textworld", "domain alfred")
-        domain_pddl = self._logic.domain.lower()
-        plan = fast_downward.solve_pddl(domain_pddl, current_pddl)
-        if plan:
-            templated_actions = self.plan_to_templated_actions(plan, infos)
-            return templated_actions
-        else:
+        if not self.downward_lib.replan(check_flag("TW_PDDL_DEBUG")):
             return []
+
+        operators = (Operator * self.downward_lib.get_last_plan_length())()
+        self.downward_lib.get_last_plan(operators)
+        plan = [op.name for op in operators]
+        templated_actions = self.plan_to_templated_actions(plan, infos)
+        return templated_actions
 
     def plan_to_templated_actions(self, plan, infos):
         templated_actions = []
