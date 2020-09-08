@@ -3,17 +3,9 @@
 
 
 # -*- coding: utf-8 -*-
-import os
-import re
-import sys
 import json
-import textwrap
 
-from typing import Mapping, Union, Tuple, List, Optional
-
-import numpy as np
-
-from io import StringIO
+from typing import Mapping, Union, Optional
 
 import textworld
 from textworld.core import EnvInfos, GameState
@@ -37,16 +29,45 @@ class PddlEnv(textworld.Environment):
         super().__init__(infos)
         self.downward_lib = fast_downward.load_lib()
 
+    @property
+    def _replanning(self):
+        return (
+            self.infos.intermediate_reward
+            or self.infos.policy_commands
+            or "walkthrough" in self.infos.extras
+        )
+
     def load(self, filename_or_data: Union[str, Mapping]) -> None:
         try:
             data = json.load(open(filename_or_data))
+            self._gamefile = filename_or_data
         except TypeError:
             data = filename_or_data
+            self._gamefile = None
 
         self._logic = GameLogic(domain=data["pddl_domain"], grammar=data["grammar"])
         self._state = State(self.downward_lib, data["pddl_problem"], self._logic)
+
+        self._plan = None
+
         self._game = Game(self._state)
+        self._game.metadata["walkthrough"] = data.get("walkthrough", [])
         self._game_progression = None
+
+    def _get_human_readable_policy(self, policy):
+        mapping = {k: info.name for k, info in self._game.infos.items()}
+
+        commands = []
+        for operator in policy:
+            splits = operator.name.split()
+            name, arguments = splits[0], splits[1:]
+
+            parameters = self._game_progression.state._actions[name].parameters
+            substitutions = {p.name.strip("?"): "{{{}}}".format(arg) for p, arg in zip(parameters, arguments)}
+            command_template = self._logic.actions[name].template.format(**substitutions)
+            commands.append(command_template.format(**mapping))
+
+        return commands
 
     def _gather_infos(self):
         self.state["game"] = self._game
@@ -56,23 +77,14 @@ class PddlEnv(textworld.Environment):
         self.state["objective"] = self._game.objective
         self.state["max_score"] = self._game.max_score
 
-        # for k, v in self._game.extras.items():
-        #     self.state["extra.{}".format(k)] = v
-
         self.state["_game_progression"] = self._game_progression
         self.state["_facts"] = list(self._game_progression.state.facts)
-
-        if self.infos.expert_plan:
-            self.state["expert_plan"] = self._game_progression.state.replan(self._game.infos)
-
         self.state["won"] = self._game_progression.state.check_goal()
-        self.state["lost"] = False  # Can an ALFRED game be lost?
+        self.state["lost"] = False  # TODO: ask Downward if there's no solution.
 
         self.state["_winning_policy"] = self._current_winning_policy
-        # if self.infos.policy_commands:
-        #     self.state["policy_commands"] = []
-        #     if self._game_progression.winning_policy is not None:
-        #         self.state["policy_commands"] = self._inform7.gen_commands_from_actions(self._current_winning_policy)
+        if self.infos.policy_commands:
+            self.state["policy_commands"] = self._get_human_readable_policy(self.state["_winning_policy"])
 
         if self.infos.intermediate_reward:
             self.state["intermediate_reward"] = 0
@@ -91,33 +103,25 @@ class PddlEnv(textworld.Environment):
                 diff = len(self._previous_winning_policy) - len(self._current_winning_policy)
                 self.state["intermediate_reward"] = int(diff > 0) - int(diff < 0)  # Sign function.
 
-        # if self.infos.facts:
-        #     self.state["facts"] = list(map(self._inform7.get_human_readable_fact, self.state["_facts"]))
-
         self.state["last_action"] = None
         self.state["_last_action"] = self._last_action
-        # if self.infos.last_action and self._last_action is not None:
-        #     self.state["last_action"] = self._inform7.get_human_readable_action(self._last_action)
-
         self.state["_valid_actions"] = self._game_progression.valid_actions
 
         mapping = {k: info.name for k, info in self._game.infos.items()}
         self.state["_valid_commands"] = []
         for action in self._game_progression.valid_actions:
-
-            context = {
-                "state": self._game_progression.state,
-                "facts": list(self._game_progression.state.facts),
-                "variables": {ph.name: self._game.infos[var.name] for ph, var in action.mapping.items()},
-                "mapping": action.mapping,
-                "entity_infos": self._game.infos,
-            }
-            backup = action.command_template
-            action.command_template = self._game.state._logic.grammar.derive(action.command_template, context)
-            #print(action.command_template)
+            mapping = {ph.name: self._game.infos[var.name].name for ph, var in action.mapping.items()}
             self.state["_valid_commands"].append(action.format_command(mapping))
 
-        # self.state["_valid_commands"] = [a.format_command(mapping) for a in self._game_progression.valid_actions]
+            # context = {
+            #     "state": self._game_progression.state,
+            #     "facts": list(self._game_progression.state.facts),
+            #     "variables": {ph.name: self._game.infos[var.name] for ph, var in action.mapping.items()},
+            #     "mapping": action.mapping,
+            #     "entity_infos": self._game.infos,
+            # }
+            # action.command_template = self._game.state._logic.grammar.derive(action.command_template, context)
+            # self.state["_valid_commands"].append(action.format_command(mapping))
 
         # To guarantee the order from one execution to another, we sort the commands.
         # Remove any potential duplicate commands (they would lead to the same result anyway).
@@ -128,25 +132,32 @@ class PddlEnv(textworld.Environment):
 
     def reset(self):
         self.prev_state = None
-        self.state = GameState()
-        track_quests = (self.infos.intermediate_reward or self.infos.policy_commands)
-        self._game_progression = GameProgression(self._game, track_quests=track_quests)
+        self._game_progression = GameProgression(self._game, track_quests=False)
         self._last_action = None
         self._previous_winning_policy = None
-        self._current_winning_policy = self._game_progression.winning_policy
+        self._current_winning_policy = None
+
+        if self._replanning:
+            if self._game.metadata["walkthrough"]:
+                self._previous_winning_policy = fast_downward.names2operators(self.downward_lib,
+                                                                              self._game.metadata["walkthrough"])
+
+            self._current_winning_policy = self._game_progression.state.replan(self._previous_winning_policy)
+
         self._moves = 0
 
         context = {
             "state": self._game_progression.state,
             "facts": list(self._game.state.facts),
             "variables": {},
-            "mapping": {}, #dict(self._game.kb.types.constants_mapping),
+            "mapping": {},  # dict(self._game.kb.types.constants_mapping),
             "entity_infos": self._game.infos,
         }
 
         self.state.feedback = self._game.state._logic.grammar.derive("#intro#", context)
         self.state.raw = self.state.feedback
         self._gather_infos()
+
         return self.state
 
     def step(self, command: str):
@@ -164,7 +175,9 @@ class PddlEnv(textworld.Environment):
             self._last_action = self._game_progression.valid_actions[idx]
             # An action that affects the state of the game.
             self.state.effects = self._game_progression.update(self._last_action)
-            self._current_winning_policy = self._game_progression.winning_policy
+            self._current_winning_policy = None
+            if self._replanning:
+                self._current_winning_policy = self._game_progression.state.replan(self._previous_winning_policy)
 
             context = {
                 "state": self._game_progression.state,
@@ -177,11 +190,10 @@ class PddlEnv(textworld.Environment):
             self.state.feedback = self._game.state._logic.grammar.derive(self._last_action.feedback_rule, context)
             self._moves += 1
         except ValueError:
+            # We assume nothing has happened in the game.
             # TODO: handle error messages
             self.state.effects = []
             self.state.feedback = "Nothing happens."
-            # print("Unknown command: {}".format(command))
-            pass  # We assume nothing happened in the game.
 
         self.state.raw = self.state.feedback
         self._gather_infos()
@@ -189,7 +201,7 @@ class PddlEnv(textworld.Environment):
         self.state["done"] = self.state["won"] or self.state["lost"]
         return self.state, self.state["score"], self.state["done"]
 
-    def copy(self) -> "TextWorldEnv":
+    def copy(self) -> "PddlEnv":
         """ Return a soft copy. """
         env = PddlEnv()
 
@@ -207,25 +219,3 @@ class PddlEnv(textworld.Environment):
         env._moves = self._moves
         env._game_progression = self._game_progression.copy()
         return env
-
-    def render(self, mode: str = "human") -> None:
-        outfile = StringIO() if mode in ['ansi', "text"] else sys.stdout
-
-        msg = self.state.feedback.rstrip() + "\n"
-        if self.display_command_during_render and self.state.last_command is not None:
-            msg = '> ' + self.state.last_command + "\n" + msg
-
-        # Wrap each paragraph.
-        if mode == "human":
-            paragraphs = msg.split("\n")
-            paragraphs = ["\n".join(textwrap.wrap(paragraph, width=80)) for paragraph in paragraphs]
-            msg = "\n".join(paragraphs)
-
-        outfile.write(msg + "\n")
-
-        if mode == "text":
-            outfile.seek(0)
-            return outfile.read()
-
-        if mode == 'ansi':
-            return outfile

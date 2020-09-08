@@ -1,13 +1,9 @@
 
-import re
 import json
 import textwrap
-from os.path import join as pjoin
-from pprint import pprint
 
-from collections import Counter, defaultdict, deque
-from functools import total_ordering, lru_cache
-from typing import Callable, Dict, Iterable, List, Mapping, Optional, Set, Sequence
+from collections import Counter, defaultdict
+from typing import Iterable
 
 from tatsu.model import NodeWalker
 
@@ -18,7 +14,7 @@ import textworld.logic.model
 from textworld.utils import check_flag
 from textworld.logic.model import GameLogicModelBuilderSemantics
 from textworld.logic.parser import GameLogicParser
-from textworld.logic import Proposition, Variable, Predicate, Rule, Placeholder
+from textworld.logic import Proposition, Variable, Placeholder
 
 from textworld.textgen import TextGrammar
 
@@ -79,6 +75,7 @@ def _parse_and_convert(*args, **kwargs):
     model = _PARSER.parse(*args, **kwargs)
     return _ModelConverter().walk(model)
 
+
 def get_var_name(value):
     if value.lower() in ("i", "p"):
         return value.upper()
@@ -129,11 +126,11 @@ class Atom(fast_downward.Atom):
 
 class Action:
     def __init__(self, name, template, pddl, grammar, feedback_rule):
-       self.name = name
-       self.feedback_rule = feedback_rule
-       self.template = template
-       self.pddl = pddl
-       self.grammar = grammar
+        self.name = name
+        self.feedback_rule = feedback_rule
+        self.template = template
+        self.pddl = pddl
+        self.grammar = grammar
 
 
 class GameLogic:
@@ -189,8 +186,9 @@ class State(textworld.logic.State):
         self.pddl_problem = pddl_problem
 
         # Load domain + problem.
-        self.task, self.sas = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"))
-        _, self.sas_replan = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=check_flag("TW_PDDL_DEBUG"), optimize=True)
+        verbose = check_flag("TW_PDDL_DEBUG")
+        self.task, self.sas = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=verbose)
+        _, self.sas_replan = fast_downward.pddl2sas(logic.domain, pddl_problem, verbose=verbose, optimize=True)
 
         self._actions = {a.name: a for a in self.task.actions}
 
@@ -206,6 +204,7 @@ class State(textworld.logic.State):
         self.downward_lib.load_sas_replan(self.sas_replan.encode('utf-8'))
 
         self.name2type = {o.name: o.type_name for o in self.task.objects}
+
         def _atom2proposition(atom):
             if isinstance(atom, fast_downward.translate.pddl.conditions.Atom):
                 if atom.predicate == "=":
@@ -223,7 +222,6 @@ class State(textworld.logic.State):
 
                 return Proposition(name, [Variable(arg, self.name2type[arg]) for arg in atom.fluent.args])
 
-
         facts = [_atom2proposition(atom) for atom in self.task.init]
         facts = sorted(filter(None, facts))
         self.add_facts(facts)
@@ -236,16 +234,10 @@ class State(textworld.logic.State):
         self.add_facts(facts)
 
     def all_applicable_actions(self):
-        # print("# Count operators")
         operator_count = self.downward_lib.get_applicable_operators_count()
-        # print("# Count operators - done")
-
         operators = (Operator * operator_count)()
-        # print("# Getting operators")
         self.downward_lib.get_applicable_operators(operators)
-        # print("# Getting operators - done")
         self._operators = {op.id: op for op in operators}
-        # pprint(self._operators)
 
         actions = []
         seen_operators = set()
@@ -260,8 +252,9 @@ class State(textworld.logic.State):
 
             action = textworld.logic.Action(name=name, preconditions=[], postconditions=[])
             action.id = operator.id
-            action.mapping = {Placeholder(p.name.strip("?"), p.type_name): Variable(arg, p.type_name) for p, arg in zip(self._actions[name].parameters, arguments)}
-            action.command_template = self._logic.actions[name].template#.format(**substitutions)
+            action.mapping = {Placeholder(p.name.strip("?"), p.type_name): Variable(arg, p.type_name)
+                              for p, arg in zip(self._actions[name].parameters, arguments)}
+            action.command_template = self._logic.actions[name].template
             action.feedback_rule = self._logic.actions[name].feedback_rule
             actions.append(action)
 
@@ -273,7 +266,6 @@ class State(textworld.logic.State):
 
         effects = (Atom * op.nb_effect_atoms)()
         self.downward_lib.apply_operator(op.id, effects)
-        # pprint(list(str(atom.get_fact(self.name2type)) for atom in effects))
 
         # Update facts
         changes = []
@@ -308,9 +300,9 @@ class State(textworld.logic.State):
             )
 
         problem_pddl = problem.format(
-            objects=" ".join(sorted(set("{} - {}".format(arg.name, arg.type) for fact in self.facts for arg in fact.arguments))),
+            objects=" ".join(sorted(set("{} - {}".format(arg.name, arg.type)
+                                        for fact in self.facts for arg in fact.arguments))),
             init=textwrap.indent("\n" + "\n".join(_format_proposition(fact) for fact in self.facts), "        "),
-            # goal=textwrap.indent("\n" + "\n".join(_format_proposition(fact) for fact in game.quests[0].win_events[0].condition.preconditions), "            "),
             goal="\n".join(self.pddl_problem.lower().partition("(:goal")[-1].split("\n")[:-3]),
         )
 
@@ -319,44 +311,18 @@ class State(textworld.logic.State):
 
         return problem_pddl
 
-    # @profile
-    # def replan(self, infos):
-    #     current_pddl = self.as_pddl().replace("domain textworld", "domain alfred")
-    #     domain_pddl = self._logic.domain.lower()
-    #     _, sas = fast_downward.pddl2sas(domain_pddl, current_pddl, verbose=check_flag("TW_PDDL_DEBUG"), optimize=True)
+    def replan(self, plan):
+        if plan is not None:
+            new_plan = fast_downward.update_plan(self.downward_lib, plan)
+            if new_plan:
+                return new_plan
 
-    #     if not self.downward_lib.solve_sas(sas.encode('utf-8'), check_flag("TW_PDDL_DEBUG")):
-    #         return []
-
-    #     operators = (Operator * self.downward_lib.get_last_plan_length())()
-    #     self.downward_lib.get_last_plan(operators)
-    #     plan = [op.name for op in operators]
-    #     templated_actions = self.plan_to_templated_actions(plan, infos)
-    #     return templated_actions
-
-    # @profile
-    def replan(self, infos):
         if not self.downward_lib.replan(check_flag("TW_PDDL_DEBUG")):
             return []
 
         operators = (Operator * self.downward_lib.get_last_plan_length())()
         self.downward_lib.get_last_plan(operators)
-        plan = [op.name for op in operators]
-        templated_actions = self.plan_to_templated_actions(plan, infos)
-        return templated_actions
-
-    def plan_to_templated_actions(self, plan, infos):
-        templated_actions = []
-        for step in plan:
-            components = step.split()
-            action = components[0]
-            action_params = [a.name.replace('?','') for a in self._actions[action].parameters]
-            param_values = {str(param): infos[step.split()[i+1]].name
-                            for i, param in enumerate(action_params)}
-            template = self._logic.actions[action].template if action != 'gotolocation' else "go to {r}"
-            template = template.format(**param_values)
-            templated_actions.append(template)
-        return templated_actions
+        return operators
 
     def print_state(self):
         print("-= STATE =-")
