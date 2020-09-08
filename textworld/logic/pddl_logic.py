@@ -225,14 +225,14 @@ class State(textworld.logic.State):
 
 
         facts = [_atom2proposition(atom) for atom in self.task.init]
-        facts = list(filter(None, facts))
+        facts = sorted(filter(None, facts))
         self.add_facts(facts)
 
         state_size = self.downward_lib.get_state_size()
         atoms = (Atom * state_size)()
         self.downward_lib.get_state(atoms)
         facts = [atom.get_fact(self.name2type) for atom in atoms]
-        facts = [fact for fact in facts if not fact.is_negation]
+        facts = sorted(fact for fact in facts if not fact.is_negation)
         self.add_facts(facts)
 
     def all_applicable_actions(self):
