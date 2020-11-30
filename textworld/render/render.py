@@ -8,7 +8,7 @@ import time
 import json
 import tempfile
 from os.path import join as pjoin
-from typing import Union, Dict, Optional
+from typing import Union, Dict, Optional, List, Tuple
 
 import numpy as np
 import networkx as nx
@@ -78,7 +78,7 @@ class GraphItem(object):
         self.predicates.append(str(predicate))
 
     def to_dict(self):
-        res = self.__dict__
+        res = dict(self.__dict__)
         res["contents"] = [item.to_dict() for item in res["contents"]]
         return res
 
@@ -144,6 +144,131 @@ def temp_viz(nodes, edges, pos, color=[]):
                                    node_size=500,
                                    alpha=0.8)
     plt.show()
+
+
+def load_simple_world(data: dict) -> dict:
+    """
+    Generates serialization of game state.
+    """
+
+    facts = data.get("facts", [])
+
+    room_positions = {
+        "garden": (-1, 0),
+        "kitchen": (0, 0),
+        "supermarket": (1, 0),
+        "bathroom": (-1, 1),
+        "living_room": (0, 1),
+        "bedroom": (1, 1),
+    }
+
+    edges = [
+        ("garden", "kitchen", None),
+        ("supermarket", "kitchen", None),
+        ("living_room", "kitchen", None),
+        ("living_room", "bathroom", None),
+        ("living_room", "bedroom", None),
+    ]
+
+    rooms = {}
+    for room, position in room_positions.items():
+        rooms[room] = GraphRoom(room, None)
+        rooms[room].position = position
+
+    result = {}
+    result["objective"] = data.get("objective", "Go explore the world.")
+
+    # Objects
+    all_items = {}
+    # inventory_items = []
+
+    # Extract all items first.
+    for rel, subject, prop in facts:
+        if rel != "is":
+            continue
+
+        if subject in rooms:
+            continue  # Skip room objects.
+
+        if subject not in all_items:
+            all_items[subject] = GraphItem("t", subject)
+
+        obj = all_items[subject]
+
+        if prop == "portable":
+            obj.portable = True
+            obj.type = "o" if obj.type == "t" else obj.type
+        elif prop == "ingredient":
+            obj.type = "f"
+        elif prop == "player":
+            obj.type = "P"
+        elif prop == "container":
+            obj.type = "c"
+        elif prop == "griller":
+            obj.ocl = "open"
+        elif prop == "supporter":
+            obj.type = "s"
+        elif prop == "open":
+            obj.ocl = "open"
+        elif prop == "closed":
+            obj.ocl = "closed"
+        elif prop in ('uncut', 'sliced', 'diced', 'chopped', 'mashed'):
+            obj.predicates.append(prop)
+        elif prop in ('raw', 'roasted', 'fried', 'grilled', 'burned'):
+            obj.predicates.append(prop)
+        elif prop in ('sharp', 'blunt'):
+            obj.predicates.append(prop)
+        elif prop in ('red', 'green', 'yellow', 'blue', 'magenta', 'orange', 'purple', 'brown', 'white'):
+            obj.predicates.append(prop)
+        elif prop in ('wooden', 'metal', 'glass', 'plastic', 'ceramic', 'soil'):
+            obj.predicates.append(prop)
+        elif prop in ('good', 'bad'):
+            obj.predicates.append(prop)
+        elif prop in ('ripe', 'unripe'):
+            obj.predicates.append(prop)
+        elif prop in ("cuttable", "cookable", "edible", "drinkable", "cuter", "portable", "openable",
+                      "heat_source", "furniture", "tools", "ingredient",
+                      "masher", "liquid", "frier", "roaster", "griller", "mashable"):
+            obj.predicates.append(prop)
+
+    # Place each item in its corresponding holder.
+    for rel, subject, holder in facts:
+        if rel != "in":
+            continue
+
+        subject = all_items[subject]
+        if holder in all_items:
+            holder = all_items[holder]
+            holder.contents.append(subject)
+        else:
+            # Assume holder is a room.
+            if subject.portable:
+                continue  # Portable objects are nested contents of a particular holder.
+
+            room = rooms.get(holder)
+            room.items.append(subject)
+
+    result["rooms"] = []
+    for room in rooms.values():
+        room.items = [item.to_dict() for item in room.items]
+        room.base_room = {"attributes": []}  # HACK: not used.
+        result["rooms"].append(room.__dict__)
+
+    def _get_door(door):
+        if door is None:
+            return None
+
+        return all_items[door.name].__dict__
+
+    def _get_name(entity):
+        return entity
+        return game_infos[entity].name
+
+    result["connections"] = [{"src": _get_name(e[0]), "dest": _get_name(e[1]), "door": _get_door(e[2])}
+                             for e in edges]
+    result["inventory"] = []#[inv.__dict__ for inv in inventory_items]
+
+    return result
 
 
 def load_state(world: World,
@@ -479,6 +604,8 @@ def visualize(world: Union[Game, State, GameState, World],
         state = world
         world = World.from_facts(state.facts)
         state = load_state(world)
+    elif isinstance(world, dict):
+        state = load_simple_world(world)
     else:
         raise ValueError("Don't know how to visualize: {!r}".format(world))
 

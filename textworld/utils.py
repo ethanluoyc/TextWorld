@@ -218,5 +218,10 @@ def check_flag(flag: str):
     return str2bool(os.environ.get(flag))
 
 
+def fmtcols(mylist, cols):
+    lines = ("\t".join(mylist[i:i + cols]) for i in range(0, len(mylist), cols))
+    return '\n'.join(lines)
+
+
 #: Global random generator.
 g_rng = RandomGenerator()

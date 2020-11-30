@@ -855,6 +855,7 @@ class GameMaker:
         :param save_screenshot: ONLY FOR WHEN interactive == False. Save screenshot in temp directory.
         :param filename: filename for screenshot
         """
+        import textworld.render
         game = self.build(validate=False)
         return textworld.render.visualize(game, interactive=interactive)
 

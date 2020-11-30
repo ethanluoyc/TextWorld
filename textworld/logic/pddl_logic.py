@@ -16,7 +16,7 @@ from textworld.logic.model import GameLogicModelBuilderSemantics
 from textworld.logic.parser import GameLogicParser
 from textworld.logic import Proposition, Variable, Placeholder
 
-from textworld.textgen import TextGrammar
+from textworld.textgen.csg import ContextSensitiveGrammar
 
 
 class _ModelConverter(NodeWalker):
@@ -64,7 +64,7 @@ class _ModelConverter(NodeWalker):
             elif isinstance(part, textworld.logic.model.ActionGrammarNode):
                 grammar.update(json.loads(self._unescape_block(part.code)))
 
-        grammar = TextGrammar.parse(json.dumps(grammar))
+        grammar = ContextSensitiveGrammar.parse(json.dumps(grammar))
         return actions, grammar
 
 
@@ -77,17 +77,18 @@ def _parse_and_convert(*args, **kwargs):
 
 
 def get_var_name(value):
-    if value.lower() in ("i", "p"):
-        return value.upper()
+    # if value.lower() in ("i", "p"):
+        # return value.upper()
 
     return value
 
 
 def get_var_type(value):
-    if value.lower() in ("i", "p"):
-        return value.upper()
+    return "object"
+    # if value.lower() in ("i", "p"):
+        # return value.upper()
 
-    return value[0]
+    # return value[0]
 
 
 class Atom(fast_downward.Atom):
@@ -140,7 +141,7 @@ class GameLogic:
 
     def __init__(self, domain, grammar):
         self.domain = domain
-        self.grammar = TextGrammar()
+        self.grammar = ContextSensitiveGrammar()
         self.actions = {}
         self.types = textworld.logic.TypeHierarchy()
 
@@ -229,7 +230,7 @@ class State(textworld.logic.State):
         state_size = self.downward_lib.get_state_size()
         atoms = (Atom * state_size)()
         self.downward_lib.get_state(atoms)
-        facts = [atom.get_fact(self.name2type) for atom in atoms]
+        facts = [atom.get_fact(self.name2type) for atom in atoms if not atom.name.startswith("Atom dummy")]
         facts = sorted(fact for fact in facts if not fact.is_negation)
         self.add_facts(facts)
 
@@ -329,4 +330,4 @@ class State(textworld.logic.State):
         state_size = self.downward_lib.get_state_size()
         atoms = (Atom * state_size)()
         self.downward_lib.get_state(atoms)
-        print("\n".join(sorted(str(atom.get_fact(self.name2type)) for atom in atoms)))
+        print("\n".join(sorted(str(atom.get_fact(self.name2type)) for atom in atoms if not atom.name.startswith("Atom dummy"))))
