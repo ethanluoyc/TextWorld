@@ -1922,7 +1922,7 @@ class State:
         types = [self._logic.types.get(t) for t in pred.signature.types]
         for subtypes in self._logic.types.multi_subtypes(types):
             signature = Signature(pred.signature.name, [t.name for t in subtypes])
-            for prop in self.facts_with_signature(signature):
+            for prop in sorted(self.facts_with_signature(signature)):
                 for ph, var in zip(pred.parameters, prop.arguments):
                     existing = mapping.get(ph)
                     if existing is None:
