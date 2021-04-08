@@ -233,7 +233,7 @@ def load_simple_world(data: dict) -> dict:
 
     # Place each item in its corresponding holder.
     for rel, subject, holder in facts:
-        if rel != "in":
+        if rel not in ("in", "on", "at"):
             continue
 
         subject = all_items[subject]
