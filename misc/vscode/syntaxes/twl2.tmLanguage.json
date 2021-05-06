@@ -1,0 +1,285 @@
+{
+  "fileTypes": [
+    "twl2"
+  ],
+  "name": "twl2",
+  "patterns": [
+    {
+      "include": "#main"
+    }
+  ],
+  "scopeName": "source.twl2",
+  "uuid": "",
+  "repository": {
+    "main": {
+      "patterns": [
+        {
+          "begin": "(grammar\\s*\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.twl2"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#main__1"
+            }
+          ],
+          "end": "(\\})",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.twl2"
+            }
+          }
+        },
+        {
+          "begin": "(actions\\s*{)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.twl2"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#main__2"
+            }
+          ],
+          "end": "(})",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.twl2"
+            }
+          }
+        },
+        {
+          "include": "#comment"
+        }
+      ]
+    },
+    "action": {
+      "patterns": [
+        {
+          "match": "(\\b[a-zA-Z][a-zA-Z0-9.\\-_]*)(\\(.*\\))",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.twl2"
+            },
+            "2": {
+              "name": "constant.language.twl2"
+            }
+          }
+        },
+        {
+          "match": "(->)",
+          "name": "keyword.operator.implication.twl2"
+        },
+        {
+          "include": "#rsh"
+        },
+        {
+          "match": "(\\|)([^\\x{0023}]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.given.twl2"
+            },
+            "2": {
+              "name": "constant.language.twl2"
+            }
+          }
+        },
+        {
+          "include": "#comment"
+        }
+      ]
+    },
+    "comment": {
+      "patterns": [
+        {
+          "begin": "(#)",
+          "beginCaptures": {
+            "1": {
+              "name": "comment.twl2"
+            }
+          },
+          "contentName": "comment.twl2",
+          "end": "(^(?=.{0,1})(?:|))",
+          "endCaptures": {
+            "1": {
+              "name": "none.twl2"
+            }
+          }
+        }
+      ]
+    },
+    "comment__1": {
+      "patterns": []
+    },
+    "grammar": {
+      "patterns": [
+        {
+          "match": "(\\b[a-zA-Z][a-zA-Z0-9.\\-_]*)",
+          "name": "entity.name.function.twl2"
+        },
+        {
+          "match": "(->)",
+          "name": "keyword.operator.implication.twl2"
+        },
+        {
+          "include": "#rsh"
+        },
+        {
+          "match": "(\\|)([^\\x{0023}]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.given.twl2"
+            },
+            "2": {
+              "name": "constant.language.twl2"
+            }
+          }
+        },
+        {
+          "include": "#comment"
+        }
+      ]
+    },
+    "listSymbol": {
+      "patterns": [
+        {
+          "begin": "(\\[)",
+          "beginCaptures": {
+            "1": {
+              "name": "variable.twl2"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#listSymbol__1"
+            }
+          ],
+          "end": "(\\])",
+          "endCaptures": {
+            "1": {
+              "name": "variable.twl2"
+            }
+          }
+        }
+      ]
+    },
+    "listSymbol__1": {
+      "patterns": [
+        {
+          "include": "#specialSymbol"
+        },
+        {
+          "include": "#nonTerminalSymbol"
+        }
+      ]
+    },
+    "main__1": {
+      "patterns": [
+        {
+          "include": "#grammar"
+        }
+      ]
+    },
+    "main__2": {
+      "patterns": [
+        {
+          "include": "#action"
+        }
+      ]
+    },
+    "nonTerminalSymbol": {
+      "patterns": [
+        {
+          "begin": "(<)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.other.inherited-class.twl2"
+            }
+          },
+          "contentName": "entity.other.inherited-class.twl2",
+          "end": "(>)",
+          "endCaptures": {
+            "1": {
+              "name": "entity.other.inherited-class.twl2"
+            }
+          }
+        }
+      ]
+    },
+    "nonTerminalSymbol__1": {
+      "patterns": []
+    },
+    "rsh": {
+      "patterns": [
+        {
+          "begin": "(\\\")",
+          "beginCaptures": {
+            "1": {
+              "name": "string.twl2"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#rsh__1"
+            }
+          ],
+          "end": "(\\\")",
+          "endCaptures": {
+            "1": {
+              "name": "string.twl2"
+            }
+          }
+        }
+      ]
+    },
+    "rsh__1": {
+      "patterns": [
+        {
+          "include": "#listSymbol"
+        },
+        {
+          "include": "#specialSymbol"
+        },
+        {
+          "include": "#nonTerminalSymbol"
+        },
+        {
+          "include": "#text"
+        }
+      ]
+    },
+    "specialSymbol": {
+      "patterns": [
+        {
+          "begin": "({)",
+          "beginCaptures": {
+            "1": {
+              "name": "variable.parameter.twl2"
+            }
+          },
+          "contentName": "variable.parameter.twl2",
+          "end": "(})",
+          "endCaptures": {
+            "1": {
+              "name": "variable.parameter.twl2"
+            }
+          }
+        }
+      ]
+    },
+    "specialSymbol__1": {
+      "patterns": []
+    },
+    "text": {
+      "patterns": [
+        {
+          "match": "([^\\x{007b}\\x{007d}\\[\\]\\x{003c}\\x{003e}\\x{0022}]+)",
+          "name": "string.twl2"
+        }
+      ]
+    }
+  }
+}

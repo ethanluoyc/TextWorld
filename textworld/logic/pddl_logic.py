@@ -19,61 +19,61 @@ from textworld.logic import Proposition, Variable, Placeholder
 from textworld.textgen.csg import ContextSensitiveGrammar
 
 
-class _ModelConverter(NodeWalker):
-    """
-    Converts TatSu model objects to our types.
-    """
+# class _ModelConverter(NodeWalker):
+#     """
+#     Converts TatSu model objects to our types.
+#     """
 
-    def __init__(self, logic=None):
-        super().__init__()
-        self._cache = {}
-        self._logic = logic
+#     def __init__(self, logic=None):
+#         super().__init__()
+#         self._cache = {}
+#         self._logic = logic
 
-    def _unescape(self, string):
-        # Strip quotation marks
-        return string[1:-1]
+#     def _unescape(self, string):
+#         # Strip quotation marks
+#         return string[1:-1]
 
-    def _unescape_block(self, string):
-        # Strip triple quotation marks and dedent
-        string = string[3:-3]
-        return textwrap.dedent(string)
+#     def _unescape_block(self, string):
+#         # Strip triple quotation marks and dedent
+#         string = string[3:-3]
+#         return textwrap.dedent(string)
 
-    def walk_list(self, l):
-        return [self.walk(node) for node in l]
+#     def walk_list(self, l):
+#         return [self.walk(node) for node in l]
 
-    def walk_ActionTypeNode(self, node):
-        action = Action(
-            name=node.name,
-            template=self._unescape(node.template.template),
-            feedback_rule=self._unescape(node.feedback.name),
-            pddl=self._unescape_block(node.pddl.code) if node.pddl else "",
-            grammar=self._unescape_block(node.grammar.code) if node.grammar else "{}"
-        )
+#     def walk_ActionTypeNode(self, node):
+#         action = Action(
+#             name=node.name,
+#             template=self._unescape(node.template.template),
+#             feedback_rule=self._unescape(node.feedback.name),
+#             pddl=self._unescape_block(node.pddl.code) if node.pddl else "",
+#             grammar=self._unescape_block(node.grammar.code) if node.grammar else "{}"
+#         )
 
-        return action
+#         return action
 
-    def walk_PddlDocumentNode(self, node):
-        actions = {}
-        grammar = {}
-        for part in node.parts:
-            if isinstance(part, textworld.logic.model.ActionTypeNode):
-                action = self.walk(part)
-                actions[action.name.lower()] = action
-                grammar_data = "\n".join(line for line in action.grammar.split("\n") if not line.lstrip().startswith("#"))
-                grammar.update(json.loads(grammar_data))
-            elif isinstance(part, textworld.logic.model.ActionGrammarNode):
-                grammar.update(json.loads(self._unescape_block(part.code)))
+#     def walk_PddlDocumentNode(self, node):
+#         actions = {}
+#         grammar = {}
+#         for part in node.parts:
+#             if isinstance(part, textworld.logic.model.ActionTypeNode):
+#                 action = self.walk(part)
+#                 actions[action.name.lower()] = action
+#                 grammar_data = "\n".join(line for line in action.grammar.split("\n") if not line.lstrip().startswith("#"))
+#                 grammar.update(json.loads(grammar_data))
+#             elif isinstance(part, textworld.logic.model.ActionGrammarNode):
+#                 grammar.update(json.loads(self._unescape_block(part.code)))
 
-        grammar = ContextSensitiveGrammar.parse(json.dumps(grammar))
-        return actions, grammar
-
-
-_PARSER = GameLogicParser(semantics=GameLogicModelBuilderSemantics(), parseinfo=True)
+#         grammar = ContextSensitiveGrammar.parse(json.dumps(grammar))
+#         return actions, grammar
 
 
-def _parse_and_convert(*args, **kwargs):
-    model = _PARSER.parse(*args, **kwargs)
-    return _ModelConverter().walk(model)
+# _PARSER = GameLogicParser(semantics=GameLogicModelBuilderSemantics(), parseinfo=True)
+
+
+# def _parse_and_convert(*args, **kwargs):
+#     model = _PARSER.parse(*args, **kwargs)
+#     return _ModelConverter().walk(model)
 
 
 def get_var_name(value):
@@ -125,13 +125,43 @@ class Atom(fast_downward.Atom):
         return Proposition(name, arguments)
 
 
-class Action:
-    def __init__(self, name, template, pddl, grammar, feedback_rule):
-        self.name = name
-        self.feedback_rule = feedback_rule
-        self.template = template
-        self.pddl = pddl
-        self.grammar = grammar
+# class Action:
+#     def __init__(self, name, template, pddl, grammar, feedback_rule):
+#         self.name = name
+#         self.feedback_rule = feedback_rule
+#         self.template = template
+#         self.pddl = pddl
+#         self.grammar = grammar
+
+
+# class GameLogic:
+#     """
+#     The logic for a game (types, rules, grammar, etc.).
+#     """
+
+#     def __init__(self, domain, grammar):
+#         self.domain = domain
+#         self.grammar = ContextSensitiveGrammar()
+#         self.actions = {}
+#         self.types = textworld.logic.TypeHierarchy()
+
+#         # Load grammar's content
+#         actions, grammar = _parse_and_convert(grammar, rule_name="pddlStart")
+#         self.actions.update(actions)
+#         self.grammar.update(grammar)
+
+#     def load_domain(self, filename):
+#         self.domain_filename = filename
+#         with open(filename) as f:
+#             self.domain = f.read()
+
+#     def import_twl2(self, filename):
+#         with open(filename) as f:
+#             document = f.read()
+
+#         actions, grammar = _parse_and_convert(document, rule_name="pddlStart")
+#         self.actions.update(actions)
+#         self.grammar.update(grammar)
 
 
 class GameLogic:
@@ -139,29 +169,15 @@ class GameLogic:
     The logic for a game (types, rules, grammar, etc.).
     """
 
-    def __init__(self, domain, grammar):
+    def __init__(self, domain):
         self.domain = domain
-        self.grammar = ContextSensitiveGrammar()
         self.actions = {}
         self.types = textworld.logic.TypeHierarchy()
-
-        # Load grammar's content
-        actions, grammar = _parse_and_convert(grammar, rule_name="pddlStart")
-        self.actions.update(actions)
-        self.grammar.update(grammar)
 
     def load_domain(self, filename):
         self.domain_filename = filename
         with open(filename) as f:
             self.domain = f.read()
-
-    def import_twl2(self, filename):
-        with open(filename) as f:
-            document = f.read()
-
-        actions, grammar = _parse_and_convert(document, rule_name="pddlStart")
-        self.actions.update(actions)
-        self.grammar.update(grammar)
 
 
 class State(textworld.logic.State):
@@ -255,8 +271,8 @@ class State(textworld.logic.State):
             action.id = operator.id
             action.mapping = {Placeholder(p.name.strip("?"), p.type_name): Variable(arg, p.type_name)
                               for p, arg in zip(self._actions[name].parameters, arguments)}
-            action.command_template = self._logic.actions[name].template
-            action.feedback_rule = self._logic.actions[name].feedback_rule
+            # action.command_template = self._logic.actions[name].template
+            # action.feedback_rule = self._logic.actions[name].feedback_rule
             actions.append(action)
 
         return actions
@@ -324,6 +340,12 @@ class State(textworld.logic.State):
         operators = (Operator * self.downward_lib.get_last_plan_length())()
         self.downward_lib.get_last_plan(operators)
         return operators
+
+    def get_atoms(self):
+        state_size = self.downward_lib.get_state_size()
+        atoms = (Atom * state_size)()
+        self.downward_lib.get_state(atoms)
+        return sorted(str(atom.get_fact(self.name2type)) for atom in atoms if not atom.name.startswith("Atom dummy"))
 
     def print_state(self):
         print("-= STATE =-")

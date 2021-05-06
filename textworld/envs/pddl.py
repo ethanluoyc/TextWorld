@@ -4,6 +4,7 @@
 
 # -*- coding: utf-8 -*-
 import json
+from textworld.textgen.csg import ContextSensitiveGrammar
 
 from typing import Mapping, Union, Optional
 
@@ -13,6 +14,11 @@ from textworld.generator.game2 import Game, GameProgression
 from textworld.logic.pddl_logic import GameLogic, State
 
 import fast_downward
+
+
+def format_output(text):
+    text = text.replace("_", " ")  # Underscores were used to replace spaces in PDDL files.
+    return text
 
 
 class PddlEnv(textworld.Environment):
@@ -45,12 +51,14 @@ class PddlEnv(textworld.Environment):
             data = filename_or_data
             self._gamefile = None
 
-        self._logic = GameLogic(domain=data["pddl_domain"], grammar=data["grammar"])
+        self._logic = GameLogic(domain=data["pddl_domain"])
+        self._grammar = ContextSensitiveGrammar.load(data["grammar"])
         self._state = State(self.downward_lib, data["pddl_problem"], self._logic)
 
         self._plan = None
 
         self._game = Game(self._state)
+        self._game.metadata.update(data.get("metadata", []))
         self._game.metadata["walkthrough"] = data.get("walkthrough", [])
         self._game_progression = None
 
@@ -64,7 +72,7 @@ class PddlEnv(textworld.Environment):
 
             parameters = self._game_progression.state._actions[name].parameters
             substitutions = {p.name.strip("?"): "{{{}}}".format(arg) for p, arg in zip(parameters, arguments)}
-            command_template = self._logic.actions[name].template.format(**substitutions)
+            command_template = self._grammar.actions[name].template.format(**substitutions)
             commands.append(command_template.format(**mapping))
 
         return commands
@@ -77,6 +85,7 @@ class PddlEnv(textworld.Environment):
         self.state["objective"] = self._game.objective
         self.state["max_score"] = self._game.max_score
 
+        self.state["score"] = self._game_progression.score
         self.state["_game_progression"] = self._game_progression
         self.state["_facts"] = list(self._game_progression.state.facts)
         self.state["won"] = self._game_progression.state.check_goal()
@@ -84,7 +93,7 @@ class PddlEnv(textworld.Environment):
 
         self.state["_winning_policy"] = self._current_winning_policy
         if self.infos.policy_commands:
-            self.state["policy_commands"] = self._get_human_readable_policy(self.state["_winning_policy"])
+            self.state["policy_commands"] = [format_output(cmd) for cmd in self._get_human_readable_policy(self.state["_winning_policy"])]
 
         if self.infos.intermediate_reward:
             self.state["intermediate_reward"] = 0
@@ -111,7 +120,8 @@ class PddlEnv(textworld.Environment):
         self.state["_valid_commands"] = []
         for action in self._game_progression.valid_actions:
             mapping = {ph.name: self._game.infos[var.name].name for ph, var in action.mapping.items()}
-            self.state["_valid_commands"].append(action.format_command(mapping))
+            action.command_template = self._grammar.actions[action.name].template
+            self.state["_valid_commands"].append(format_output(action.format_command(mapping)))
 
             # context = {
             #     "state": self._game_progression.state,
@@ -154,7 +164,7 @@ class PddlEnv(textworld.Environment):
             "entity_infos": self._game.infos,
         }
 
-        self.state.feedback = self._game.state._logic.grammar.derive("#intro#", context)
+        self.state.feedback = format_output(self._grammar.derive("<intro>", context))
         self.state.raw = self.state.feedback
         self._gather_infos()
 
@@ -187,7 +197,8 @@ class PddlEnv(textworld.Environment):
                 "entity_infos": self._game.infos,
             }
 
-            self.state.feedback = self._game.state._logic.grammar.derive(self._last_action.feedback_rule, context)
+            action_feedback = self._grammar.actions[self._last_action.name].feedback
+            self.state.feedback = format_output(self._grammar.derive(action_feedback, context))
             self._moves += 1
         except ValueError:
             # We assume nothing has happened in the game.
@@ -197,7 +208,7 @@ class PddlEnv(textworld.Environment):
 
         self.state.raw = self.state.feedback
         self._gather_infos()
-        self.state["score"] = self._game_progression.score
+        # self.state["score"] = self._game_progression.score
         self.state["done"] = self.state["won"] or self.state["lost"]
         return self.state, self.state["score"], self.state["done"]
 

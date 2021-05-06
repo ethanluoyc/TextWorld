@@ -1,0 +1,81 @@
+@@grammar :: TWL2
+@@eol_comments :: /#.*?$/
+#;
+
+(* Symbol definitions *)
+
+tag = ?"[\w()/!\-\s,.]+" ;
+
+given = ?"([^;{}\n\[\]<>])+" ;
+
+statement = ?"([^|\[\]{}\n<>])+" ;
+
+Literal = ?'([^;|"<>\[\]{}\n]+)?' ;
+
+literalAlternative::Literal = value:Literal ;
+
+TerminalSymbol::TerminalSymbol = ('"' literal:Literal '"' | literal:Literal) ;
+
+NonterminalSymbol::NonterminalSymbol = ?"<" symbol:tag ">" ;
+
+evalSymbol::EvalSymbol = statement:statement ;
+
+conditionalSymbol::ConditionalSymbol = expression:(NonterminalSymbol | evalSymbol) ["|" given:given] ;
+
+SpecialSymbol::SpecialSymbol = ?"\{" statement:conditionalSymbol "}" ;
+
+ListSymbol::ListSymbol = ?"\[" symbols:(?",\s*").{SpecialSymbol | NonterminalSymbol | TerminalSymbol}+ "]" ;
+
+Symbol = ListSymbol | SpecialSymbol | NonterminalSymbol | TerminalSymbol ;
+
+adjectiveNoun::AdjectiveNoun = adjective:Literal "|" noun:Literal ;
+
+entity = adjectiveNoun | literalAlternative ;
+
+match::Match = lhs:entity "<->" rhs:entity ;
+
+String::String = symbols:{Symbol}+ ;
+
+alternatives = ";".{String}+ ;
+
+productionRule::ProductionRule = symbol:tag ":" alternatives:alternatives ("\n" | $) ;
+
+onlyString = @:String $ ;
+
+
+(* Generic definitions *)
+string = ?'([^"])+' ;
+
+
+(* Logic definitions *)
+phName = ?"[\w']+" ;
+predName = ?"!?[\w/]+" ;
+
+placeholder::PlaceholderNode = name:phName [":" type:phName] ;
+predicate::PredicateNode = name:predName "(" parameters:",".{placeholder}* ")" ;
+
+expression::ExpressionNode = expression:(conjunction | disjunction | predicate) ;
+conjunction::ConjunctionNode = "(" expressions:"&".{expression}+ ")" | expressions:"&".{expression}+ ;
+disjunction::DisjunctionNode = "(" expressions:"|".{expression}+ ")" | expressions:"|".{expression}+ ;
+
+
+(* Grammar definitions *)
+lhs = name:?"([a-zA-Z][a-zA-Z0-9.\-_]*)" ;
+rhs::RhsNode = '"' symbols:{Symbol}+ '"' ["|" '"' given:string '"'] ;
+rule::RuleNode = lhs:lhs {"->" rhs:rhs}+;
+grammar::GrammarNode = ?"grammar\s*\{" rules:{rule}+ "}" ;
+
+
+(* Action definitions *)
+actionName = name:?"([a-zA-Z][a-zA-Z0-9.\-_]*)" [params:?"(\([a-zA-Z0-9,\-_ ]+\))"] ;
+action::ActionNode = name:actionName ":" '"' template:string '"' "->" '"' feedback:string '"' ;
+actions::ActionsNode = ?"actions\s*\{" actions:{action}+ "}" ;
+
+
+(* Main definitions *)
+(* twl2::TWL2Document = (grammar:grammar [actions:actions]) | (actions:actions [grammar:grammar]) $ ; *)
+twl2::TWL2Document = grammar:grammar [actions:actions] ;
+start = twl2 ;  (*  Default rule_name in TatSu parse function. *)
+
+(* Partial definitions *)
+onlyExpression = @:expression $ ;

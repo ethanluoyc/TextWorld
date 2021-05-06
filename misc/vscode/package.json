@@ -2,7 +2,7 @@
 	"name": "textworld-vscode",
 	"displayName": "TextWorld",
 	"description": "Providing syntax highlighting for TextWorld files.",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"repository": "https://github.com/microsoft/TextWorld",
 	"publisher": "textworld",
 	"engines": {
@@ -34,6 +34,17 @@
 					"twg"
 				],
 				"configuration": "./language-configuration.json"
+			},
+			{
+				"id": "twl2",
+				"aliases": [
+					"TextWorld 2.0 Logic",
+					"twl2"
+				],
+				"extensions": [
+					"twl2"
+				],
+				"configuration": "./language-configuration.json"
 			}
 		],
 		"grammars": [
@@ -46,6 +57,11 @@
 				"language": "twg",
 				"scopeName": "source.twg",
 				"path": "./syntaxes/twg.tmLanguage.json"
+			},
+			{
+				"language": "twl2",
+				"scopeName": "source.twl2",
+				"path": "./syntaxes/twl2.tmLanguage.json"
 			}
 		]
 	},
