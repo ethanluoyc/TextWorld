@@ -65,6 +65,11 @@ class JerichoEnv(textworld.Environment):
         for attr in self.infos.extras:
             self.state["extra.{}".format(attr)] = getattr(self._jericho, "get_" + attr, lambda: None)()
 
+        if self.infos.admissible_commands:
+            from textworld.envs.wrappers import TWInform7
+            if not TWInform7.compatible(self.gamefile):
+                self.state["admissible_commands"] = self._jericho.get_valid_actions()
+
         # Deal with information that has different method name in Jericho.
         self.state["won"] = self._jericho.victory()
         self.state["lost"] = self._jericho.game_over()
@@ -88,6 +93,7 @@ class JerichoEnv(textworld.Environment):
 
         self.state = GameState()
         self.state.raw, _ = self._jericho.reset()
+        print("MD5:", self._jericho.get_world_state_hash())
         self._gather_infos()
         self._reset = True
         return self.state
@@ -107,6 +113,7 @@ class JerichoEnv(textworld.Environment):
         self.state = GameState()
         self.state.last_command = command.strip()
         res = self._jericho.step(self.state.last_command)
+        print("MD5:", self._jericho.get_world_state_hash())
         # As of Jericho >= 2.1.0, the reward is returned instead of the score.
         self.state.raw, _, self.state.done, _ = res
         self._gather_infos()
