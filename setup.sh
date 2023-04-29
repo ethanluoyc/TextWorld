@@ -23,7 +23,7 @@ if [ ! -e I7_6M62_Linux_all.tar.gz ]; then
     curl -LO http://emshort.com/inform-app-archive/6M62/I7_6M62_Linux_all.tar.gz
     if [ "${machine}" == 'Mac' ] && [ ! -e I7-6M62-OSX-Interim.dmg ]; then
         echo "Downloading Inform7 for Mac"
-        curl -LO http://emshort.com/inform-app-archive/6M62/I7-6M62-OSX-Interim.dmg
+        curl -LO https://github.com/ganelson/inform/releases/download/v10.1.2/inform_10_1_2_macOS_1_82_3.dmg
     fi
 fi
 if [ ! -d inform7-6M62 ]; then
@@ -49,7 +49,7 @@ fi
 # Mount DMG if we're using a Mac
 if [ "${machine}" == 'Mac' ] && [ -e inform7-6M62 ]; then
     echo "Mounting Inform for Mac"
-    hdiutil attach ./I7-6M62-OSX-Interim.dmg
+    hdiutil attach ./inform_10_1_2_macOS_1_82_3.dmg
 
     echo "Copying Mac compiled inform files"
     current_dir="$(pwd)"
